@@ -16,6 +16,6 @@
 # limitations under the License.
 #
 
-if [ ! -f 'config/module.sh' ]; then
-    cp config/module-lite.sh config/module.sh
-fi
+cd config
+rm module.sh
+ln -s module-lite-rtsp.sh module.sh

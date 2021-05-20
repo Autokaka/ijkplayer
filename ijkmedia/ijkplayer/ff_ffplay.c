@@ -351,31 +351,25 @@ static int packet_queue_get(PacketQueue *q, AVPacket *pkt, int block, int *seria
 
 static int packet_queue_get_or_buffering(FFPlayer *ffp, PacketQueue *q, AVPacket *pkt, int *serial, int *finished)
 {
-    assert(finished);
-    if (!ffp->packet_buffering)
-        return packet_queue_get(q, pkt, 1, serial);
-
-    while (1) {
-        int new_packet = packet_queue_get(q, pkt, 0, serial);
-        if (new_packet < 0)
-            return -1;
-        else if (new_packet == 0) {
-            if (q->is_buffer_indicator && !*finished)
-                ffp_toggle_buffering(ffp, 1);
-            new_packet = packet_queue_get(q, pkt, 1, serial);
-            if (new_packet < 0)
-                return -1;
-        }
-
-        if (*finished == *serial) {
-            av_packet_unref(pkt);
-            continue;
-        }
-        else
-            break;
+  while (1) {
+    int new_packet = packet_queue_get(q, pkt, 1, serial);
+    if (new_packet < 0) {
+      new_packet = packet_queue_get(q, pkt, 0, serial);
+      if (new_packet < 0) return -1;
+    } else if (new_packet == 0) {
+      if (!finished) ffp_toggle_buffering(ffp, 1);
+      new_packet = packet_queue_get(q, pkt, 1, serial);
+      if (new_packet < 0) return -1;
     }
 
-    return 1;
+    if (finished == serial) {
+      av_free_packet(pkt);
+      continue;
+    } else {
+      break;
+    }
+  }
+  return 1;
 }
 
 static void decoder_init(Decoder *d, AVCodecContext *avctx, PacketQueue *queue, SDL_cond *empty_queue_cond) {
@@ -1317,15 +1311,7 @@ static double compute_target_delay(FFPlayer *ffp, double delay, VideoState *is)
 }
 
 static double vp_duration(VideoState *is, Frame *vp, Frame *nextvp) {
-    if (vp->serial == nextvp->serial) {
-        double duration = nextvp->pts - vp->pts;
-        if (isnan(duration) || duration <= 0 || duration > is->max_frame_duration)
-            return vp->duration;
-        else
-            return duration;
-    } else {
-        return 0.0;
-    }
+  return vp->duration;
 }
 
 static void update_video_pts(VideoState *is, double pts, int64_t pos, int serial) {
@@ -2351,7 +2337,7 @@ static int ffplay_video_thread(void *arg)
                 is->frame_last_filter_delay = 0;
             tb = av_buffersink_get_time_base(filt_out);
 #endif
-            duration = (frame_rate.num && frame_rate.den ? av_q2d((AVRational){frame_rate.den, frame_rate.num}) : 0);
+            duration = 0.01;
             pts = (frame->pts == AV_NOPTS_VALUE) ? NAN : frame->pts * av_q2d(tb);
             ret = queue_picture(ffp, frame, pts, duration, frame->pkt_pos, is->viddec.pkt_serial);
             av_frame_unref(frame);
@@ -2867,6 +2853,7 @@ static int stream_component_open(FFPlayer *ffp, int stream_index)
     if (stream_index < 0 || stream_index >= ic->nb_streams)
         return -1;
     avctx = avcodec_alloc_context3(NULL);
+    avctx->flags |= AV_CODEC_FLAG_LOW_DELAY;
     if (!avctx)
         return AVERROR(ENOMEM);
 
