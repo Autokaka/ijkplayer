@@ -346,7 +346,7 @@ case "$FF_BUILD_OPT" in
     *)
         FF_CFG_FLAGS="$FF_CFG_FLAGS --enable-optimizations"
         FF_CFG_FLAGS="$FF_CFG_FLAGS --enable-debug"
-        FF_CFG_FLAGS="$FF_CFG_FLAGS --enable-small"
+        FF_CFG_FLAGS="$FF_CFG_FLAGS --disable-small"
     ;;
 esac
 
